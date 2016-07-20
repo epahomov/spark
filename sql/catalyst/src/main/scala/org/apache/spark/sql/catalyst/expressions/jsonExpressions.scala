@@ -154,7 +154,7 @@ case class GetJsonObject(json: Expression, path: Expression)
           }
         }
       } catch {
-        case _: JsonProcessingException => null
+        case _: Exception => null
       }
     } else {
       null
