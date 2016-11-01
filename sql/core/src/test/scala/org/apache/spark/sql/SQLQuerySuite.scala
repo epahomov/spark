@@ -19,12 +19,9 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.math.MathContext
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -1094,6 +1091,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
       Nil
     )
+  }
+
+  test("SPARK-17863: SELECT distinct does not work correctly if order by missing attribute") {
+    checkAnswer(
+      sql("""select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin),
+      Row(1, 2) :: Nil)
+
+    val error = intercept[AnalysisException] {
+      sql("""select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+    }
+    assert(error.message contains "cannot resolve '`struct.a`' given input columns: [a, b]")
+
   }
 
   test("cast boolean to string") {
